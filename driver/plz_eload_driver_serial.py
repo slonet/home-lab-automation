@@ -176,7 +176,7 @@ def set_voltage_trigger(voltage):
 
 	return 1
 
-def set_power_trigger(power)
+def set_power_trigger(power):
 	write_plz(f'TRIGPSET {power}')
 	write_plz('TRG')
 

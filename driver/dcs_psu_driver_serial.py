@@ -48,7 +48,7 @@ def query_dcs(query):
 	return line
 
 # reset_dcs(): resets the supply and then does some serial buffer magic to get the next query to work
-def reset_dcs():
+def hard_reset_dcs():
 	write_dcs('*RST')
 	time.sleep(0.1)
 	write_dcs('*CLS')
@@ -56,6 +56,12 @@ def reset_dcs():
 	read_dcs()
 
 	return 1
+
+def soft_reset_dcs():
+	write_dcs('*CLS')
+	query_dcs('')
+	read_dcs()
+
 
 def set_output(output_state):
 	write_dcs(f'OUTP:STAT {output_state}')
@@ -165,8 +171,3 @@ def get_current_limit():
 	return current
 
 ######### SANDBOX
-
-configure_prologix_adapter(19)
-reset_dcs()
-
-close_dcs()
