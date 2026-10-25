@@ -1,5 +1,7 @@
 import serial
 import time
+import csv
+import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -9,16 +11,16 @@ import plz_eload_driver_serial as plz
 
 plz_addr = 1
 dcs_addr = 19
-dcs_current_lim = 5
+dcs_current_lim = 0.1
 dcs_meas_avg = 2
 
-vin_min = 6
-vin_max = 14
+vin_min = 0
+vin_max = 25
 vin_step = 1
 
-iout_min = 1
-iout_max = 5
-iout_step = 1
+iout_min = 0
+iout_max = 0.06
+iout_step = 0.01
 
 csv_file_name = ""
 
@@ -155,6 +157,79 @@ def plot_meas_3d(stim_vectors, meas_vectors, meas_key,
     plt.show()
 
 
+# plot_vin_vout_2d() plots input voltage (x) vs output voltage (y), one series per output current step
+# use_measured=True plots measured Vin on the x-axis; False plots the Vin stimulus values
+def plot_vin_vout_2d(stim_vectors, meas_vectors, use_measured=True,
+		title="Input Voltage vs. Output Voltage by Load Current",
+		save_path=None):
+	vect_iout = stim_vectors["iout"]
+	num_series = len(vect_iout)
+
+	# distinct color per series (tab10 for up to 10 series, otherwise sample a continuous map)
+	if num_series <= 10:
+		colors = plt.cm.tab10(np.arange(num_series))
+	else:
+		colors = plt.cm.turbo(np.linspace(0, 1, num_series))
+
+	fig, ax = plt.subplots(figsize=(12, 6))
+
+	for j, iout in enumerate(vect_iout):
+		if use_measured:
+			x = meas_vectors["vin_meas"][:, j]
+		else:
+			x = stim_vectors["vin"]
+		y = meas_vectors["vout_meas"][:, j]
+
+		ax.plot(x, y, color=colors[j], marker="o", markersize=5,
+			linewidth=1.8, label=f"{iout * 1000:g} mA")
+
+	ax.set_title(title, loc="left", fontsize=16, color="dimgray")
+	ax.set_xlabel("Input Voltage (V)")
+	ax.set_ylabel("Output Voltage (V)")
+	ax.set_xlim(left=min(0, np.min(stim_vectors["vin"])))
+	ax.set_ylim(bottom=0)
+	ax.yaxis.set_major_formatter(plt.FormatStrFormatter("%.2f"))
+	ax.grid(True, color="lightgray")
+	ax.set_axisbelow(True)
+	for side in ("top", "right"):
+		ax.spines[side].set_visible(False)
+
+	# series name table (legend) to the right of the plot
+	ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), frameon=False,
+		handlelength=1.2, markerscale=1.6)
+
+	plt.tight_layout()
+	if save_path:
+		fig.savefig(save_path, dpi=150, bbox_inches="tight")
+	plt.show()
+
+
+# save_csv() writes one row per (vin, iout) sweep point with stimulus, measured, and optional calculated values
+# if file_name is empty, a timestamped name is generated (dc_eff_sweep_YYYYMMDD_HHMMSS.csv)
+def save_csv(stim_vectors, meas_vectors, calc_vectors, file_name="5V Linear Regulator IV Sweep"):
+	if not file_name:
+		file_name = datetime.datetime.now().strftime("dc_eff_sweep_%Y%m%d_%H%M%S.csv")
+	if not file_name.lower().endswith(".csv"):
+		file_name += ".csv"
+
+	meas_keys = list(meas_vectors.keys())
+	calc_keys = list(calc_vectors.keys()) if calc_vectors else []
+	header = ["vin_stim", "iout_stim"] + meas_keys + calc_keys
+
+	with open(file_name, "w", newline="") as f:
+		writer = csv.writer(f)
+		writer.writerow(header)
+		for i, stim_vin in enumerate(stim_vectors["vin"]):
+			for j, stim_iout in enumerate(stim_vectors["iout"]):
+				row = [stim_vin, stim_iout]
+				row += [meas_vectors[k][i, j] for k in meas_keys]
+				row += [calc_vectors[k][i, j] for k in calc_keys]
+				writer.writerow(row)
+
+	print(f"Saved sweep data to {file_name}")
+	return file_name
+
+
 ###### SCRIPT
 
 stim_vectors, meas_vectors = init_arrays()
@@ -165,7 +240,9 @@ disable_instruments()
 calc_vectors = ps_calcs(meas_vectors)
 print(calc_vectors["eff_calc"])
 
-plot_meas_3d(stim_vectors, meas_vectors, "vout_meas")
+save_csv(stim_vectors, meas_vectors, calc_vectors, csv_file_name)
+
+plot_vin_vout_2d(stim_vectors, meas_vectors)
 
 
 
